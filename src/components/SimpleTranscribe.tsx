@@ -31,7 +31,11 @@ type Phase = 'idle' | 'compressing' | 'uploading' | 'transcribing' | 'complete' 
 
 const ACCEPTED_EXTENSIONS = '.mp3,.mp4,.wav,.flac,.m4a,.mov,.avi,.aac,.ogg,.webm';
 
-export default function SimpleTranscribe() {
+interface Props {
+  initialKeyterms?: string[];
+}
+
+export default function SimpleTranscribe({ initialKeyterms = [] }: Props) {
   // ── UI state ─────────────────────────────────────────────────────────────
   const [file, setFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -41,9 +45,12 @@ export default function SimpleTranscribe() {
   const [logs, setLogs] = useState<string[]>([]);
 
   // ── Deepgram options (collapsible advanced panel) ───────────────────────
-  const [options, setOptions] = useState<DeepgramOptions>(DEFAULT_OPTIONS);
+  const [options, setOptions] = useState<DeepgramOptions>({
+    ...DEFAULT_OPTIONS,
+    keyterms: initialKeyterms,
+  });
   const [keytermInput, setKeytermInput] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(initialKeyterms.length > 0);
 
   // ── Results ──────────────────────────────────────────────────────────────
   const [currentJob, setCurrentJob] = useState<StoredJob | null>(null);
@@ -280,6 +287,13 @@ export default function SimpleTranscribe() {
           <h1 className="text-2xl font-bold text-white">DEPO-PRO <span className="text-sky-400">Simple</span></h1>
           <p className="text-sm text-slate-400 mt-1">Local-first deposition transcription · Browser → Deepgram direct · No server required</p>
         </header>
+
+        {initialKeyterms.length > 0 && (
+          <div className="mb-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs">
+            <span className="text-emerald-400 font-semibold">{initialKeyterms.length} keyterms loaded from Case Intake</span>
+            <span className="text-slate-500">({initialKeyterms.slice(0, 4).join(', ')}{initialKeyterms.length > 4 ? '...' : ''})</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ── Left column: upload + options ──────────────────────────── */}

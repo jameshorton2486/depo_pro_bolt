@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import SimpleTranscribe from './components/SimpleTranscribe';
+import CaseIntakePanel from './components/CaseIntakePanel';
 
 interface Toast {
   id: number;
@@ -7,7 +8,11 @@ interface Toast {
   type: 'success' | 'error';
 }
 
+type Tab = 'intake' | 'transcribe';
+
 export default function App() {
+  const [activeTab, setActiveTab] = useState<Tab>('intake');
+  const [pendingKeyterms, setPendingKeyterms] = useState<string[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastCounter = useRef(0);
 
@@ -68,7 +73,7 @@ export default function App() {
         </div>
       )}
 
-      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80 px-6 py-3 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-sky-600 flex items-center justify-center font-bold text-white shadow-lg shadow-sky-600/20 text-sm">
             D
@@ -79,13 +84,52 @@ export default function App() {
           </div>
         </div>
 
+        <nav className="flex items-center gap-1 bg-slate-950 border border-slate-800/80 rounded-lg p-1">
+          <button
+            onClick={() => setActiveTab('intake')}
+            className={`px-3 py-1.5 rounded text-xs font-semibold transition ${
+              activeTab === 'intake'
+                ? 'bg-sky-600 text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Case Intake
+          </button>
+          <button
+            onClick={() => setActiveTab('transcribe')}
+            className={`px-3 py-1.5 rounded text-xs font-semibold transition flex items-center gap-1.5 ${
+              activeTab === 'transcribe'
+                ? 'bg-sky-600 text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Transcribe
+            {pendingKeyterms.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold leading-none">
+                {pendingKeyterms.length}
+              </span>
+            )}
+          </button>
+        </nav>
+
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950 border border-slate-800/80">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-xs text-slate-300 font-medium">Nova 3</span>
         </div>
       </header>
 
-      <SimpleTranscribe />
+      {activeTab === 'intake' ? (
+        <div className="flex-1 overflow-hidden">
+          <CaseIntakePanel
+            onKeytermsSaved={terms => {
+              setPendingKeyterms(terms);
+              setActiveTab('transcribe');
+            }}
+          />
+        </div>
+      ) : (
+        <SimpleTranscribe initialKeyterms={pendingKeyterms} />
+      )}
     </div>
   );
 }
