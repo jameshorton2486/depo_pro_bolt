@@ -5,7 +5,7 @@
 //
 // Flow:
 //   1. User drops an audio/video file
-//   2. We compress it in-browser (Web Audio API → 16 kHz mono WAV)
+//   2. We compress it in-browser (ffmpeg.wasm → 64 kbps 16 kHz mono MP3)
 //   3. We POST it directly to Deepgram
 //   4. We display the transcript, save it to IndexedDB
 //   5. User can label speakers and export to RTF
@@ -98,7 +98,7 @@ export default function SimpleTranscribe({ initialKeyterms = [] }: Props) {
       // ── Step 1: Compress ───────────────────────────────────────────────
       setPhase('compressing');
       log(`[INPUT] ${file.name} (${formatBytes(file.size)})`);
-      log(`[COMPRESS] Decoding and resampling to 16 kHz mono WAV...`);
+      log(`[COMPRESS] Compressing to 16 kHz mono MP3 (64 kbps)...`);
 
       const compressed = await compressAudio(file, (p: CompressionProgress) => {
         // compression progress occupies 0-60% of overall pipeline

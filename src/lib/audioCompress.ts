@@ -26,10 +26,11 @@
 // ============================================================================
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
-// CDN base URL for the ffmpeg-core WASM binary. unpkg serves it with the
-// correct CORS headers so toBlobURL can re-host it as a same-origin blob.
+// toBlobURL fetches the CDN file and re-hosts it as a same-origin blob URL.
+// This sidesteps any remaining COEP/CORP edge cases by making the script
+// appear to come from the same origin, which the worker loader always accepts.
 const FFMPEG_CORE_VERSION = '0.12.6';
 const FFMPEG_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
 
@@ -61,31 +62,40 @@ async function getFFmpeg(
   if (ffmpegLoadPromise) return ffmpegLoadPromise;
 
   ffmpegLoadPromise = (async () => {
-    onProgress?.({
-      phase: 'loading_ffmpeg',
-      percent: 0,
-      message: 'Loading audio processor (one-time, ~32 MB)...',
-    });
-
     const ffmpeg = new FFmpeg();
 
-    // Optional: surface ffmpeg's own log lines to the browser console for
-    // debugging. Comment this out to silence it.
     ffmpeg.on('log', ({ message }) => {
-      if (message.includes('Error') || message.includes('error')) {
-        console.warn('[ffmpeg]', message);
+      if (import.meta.env.DEV || /error/i.test(message)) {
+        console.log('[ffmpeg]', message);
       }
     });
 
     onProgress?.({
       phase: 'loading_ffmpeg',
-      percent: 50,
+      percent: 0,
+      message: 'Downloading audio processor (~32 MB, one-time)...',
+    });
+
+    // toBlobURL fetches from CDN and returns a same-origin blob:// URL.
+    // The ffmpeg worker loader always accepts same-origin scripts, so this
+    // works regardless of COEP policy variant (require-corp or credentialless).
+    const [coreURL, wasmURL] = await Promise.all([
+      toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.js`, 'text/javascript'),
+      toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm'),
+    ]);
+
+    onProgress?.({
+      phase: 'loading_ffmpeg',
+      percent: 80,
       message: 'Initializing audio processor...',
     });
 
-    await ffmpeg.load({
-      coreURL: `${FFMPEG_BASE_URL}/ffmpeg-core.js`,
-      wasmURL: `${FFMPEG_BASE_URL}/ffmpeg-core.wasm`,
+    await ffmpeg.load({ coreURL, wasmURL });
+
+    onProgress?.({
+      phase: 'loading_ffmpeg',
+      percent: 100,
+      message: 'Audio processor ready.',
     });
 
     ffmpegInstance = ffmpeg;
