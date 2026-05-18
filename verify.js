@@ -234,16 +234,50 @@ function checkStage4() {
   }
 
   // Required packages must remain
-  for (const required of ['react', 'react-dom', '@ffmpeg/ffmpeg', '@ffmpeg/util', '@ffmpeg/core']) {
+  // Note: @ffmpeg/core is loaded from CDN via toBlobURL, not installed locally
+  for (const required of ['react', 'react-dom', '@ffmpeg/ffmpeg', '@ffmpeg/util']) {
     if (!deps[required]) fail(`Required package missing: ${required}`,
                               `Run: npm install ${required}`);
   }
 
   // Final ideal state
   const finalDeps = Object.keys(deps).sort();
-  const expectedFinal = ['@ffmpeg/core', '@ffmpeg/ffmpeg', '@ffmpeg/util', 'react', 'react-dom'];
+  // @ffmpeg/core is loaded from CDN at runtime — not needed in package.json
+  const expectedFinal = ['@ffmpeg/ffmpeg', '@ffmpeg/util', 'react', 'react-dom'];
   if (JSON.stringify(finalDeps) === JSON.stringify(expectedFinal)) {
     pass(`dependencies = { react, react-dom, @ffmpeg/* } — perfect`);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DUPLICATE FILE DETECTION
+// ────────────────────────────────────────────────────────────────────────────
+function checkDuplicateFiles() {
+  header('DUPLICATE FILES — Bolt versioning drift');
+
+  const suspicious = [];
+  const skipDirs = new Set(['node_modules', 'dist', '.git', '.bolt']);
+
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (skipDirs.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (/\((\d+)\)|[ _-]copy\b| copy\.|backup|\.old\.|_old\.|_new\.|_fixed\./i.test(entry.name)) {
+        suspicious.push(path.relative(ROOT, full));
+      }
+    }
+  }
+
+  walk(ROOT);
+
+  if (suspicious.length === 0) {
+    pass('No duplicate or versioned files found');
+  } else {
+    warn(`${suspicious.length} duplicate/versioned file(s) found — safe to delete after confirming the canonical version is correct`);
+    for (const f of suspicious) info(`• ${f}`);
   }
 }
 
@@ -274,6 +308,20 @@ function checkViteConfig() {
   } else {
     warn('@ffmpeg packages not in optimizeDeps.exclude',
          'May cause slow dev startup — add them to optimizeDeps.exclude in vite.config.ts');
+  }
+
+  if (cfg.includes('assetsInclude') && cfg.includes('.wasm')) {
+    pass('assetsInclude .wasm configured');
+  } else {
+    warn('assetsInclude: ["**/*.wasm"] missing from vite.config.ts',
+         'Add it to let Vite serve the ffmpeg WASM binary as a static asset');
+  }
+
+  if (cfg.includes('hmr') && cfg.includes('false')) {
+    pass('hmr: false set (suppresses wss://localhost:undefined errors in Bolt)');
+  } else {
+    warn('hmr: false not set in server config',
+         'Add hmr: false to server block to suppress Bolt WebContainer WS errors');
   }
 }
 
@@ -387,6 +435,7 @@ console.log(`${c.gray}  Running in: ${ROOT}${c.reset}`);
 checkStage1();
 checkBuild();
 checkViteConfig();
+checkDuplicateFiles();
 checkStage3();
 checkStage4();
 checkForbiddenImports();
