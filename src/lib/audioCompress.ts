@@ -26,7 +26,7 @@
 // ============================================================================
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import { fetchFile } from '@ffmpeg/util';
 
 // CDN base URL for the ffmpeg-core WASM binary. unpkg serves it with the
 // correct CORS headers so toBlobURL can re-host it as a same-origin blob.
@@ -77,20 +77,16 @@ async function getFFmpeg(
       }
     });
 
-    // Convert the WASM files to same-origin blob URLs. This is what makes
-    // cross-origin-isolation work without us hosting the WASM ourselves.
-    const [coreURL, wasmURL] = await Promise.all([
-      toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.js`, 'text/javascript'),
-      toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm'),
-    ]);
-
     onProgress?.({
       phase: 'loading_ffmpeg',
       percent: 50,
       message: 'Initializing audio processor...',
     });
 
-    await ffmpeg.load({ coreURL, wasmURL });
+    await ffmpeg.load({
+      coreURL: `${FFMPEG_BASE_URL}/ffmpeg-core.js`,
+      wasmURL: `${FFMPEG_BASE_URL}/ffmpeg-core.wasm`,
+    });
 
     ffmpegInstance = ffmpeg;
     return ffmpeg;
