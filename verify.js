@@ -219,7 +219,7 @@ function checkStage4() {
     '@supabase/supabase-js',
     '@tanstack/react-virtual',
     'lucide-react',
-    'pdfjs-dist',
+    // pdfjs-dist is intentionally kept — used by CaseIntakePanel for NOD PDF parsing
     'tus-js-client',
     'wavesurfer.js',
   ];
@@ -339,9 +339,9 @@ function checkForbiddenImports() {
     '@supabase/supabase-js',
     'tus-js-client',
     'wavesurfer.js',
-    'pdfjs-dist',
     'lucide-react',
     '@tanstack/react-virtual',
+    // pdfjs-dist is allowed — used by CaseIntakePanel
   ];
 
   // Old files that we EXPECT to import forbidden packages — skip them until

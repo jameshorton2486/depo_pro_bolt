@@ -1,7 +1,0 @@
-project_id = "vckpxhkyyfoqiyeegohm"
-
-[functions.transcribe-callback]
-verify_jwt = false
-
-[functions.create-upload-url]
-verify_jwt = true
