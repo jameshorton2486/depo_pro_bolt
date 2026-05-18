@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { compressAudio, formatBytes } from '../lib/audioCompress';
 import type { CompressionProgress } from '../lib/audioCompress';
 import { transcribe, parseUtterances, DEFAULT_OPTIONS } from '../lib/deepgramClient';
-import type { DeepgramOptions, ParsedUtterance } from '../lib/deepgramClient';
+import type { DeepgramOptions } from '../lib/deepgramClient';
 import {
   saveJob,
   listJobs,
@@ -574,7 +574,7 @@ export default function SimpleTranscribe() {
                           <button onClick={() => loadJob(job)} className="flex-1 min-w-0 text-left">
                             <p className="text-sm font-medium text-slate-200 truncate">{job.source_file_name}</p>
                             <p className="text-xs text-slate-500 mt-0.5">
-                              {new Date(job.created_at).toLocaleString()} &middot; {job.utterances?.length ?? '?'} utterances
+                              {new Date(job.created_at).toLocaleString()} &middot; {job.word_count ?? '?'} words
                             </p>
                           </button>
                           <button
