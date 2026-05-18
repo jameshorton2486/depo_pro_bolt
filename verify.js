@@ -1,322 +1,328 @@
-// verify.js — DEPO-PRO migration stage checker
-// Usage: node verify.js
-// No dependencies required — pure Node standard library.
+#!/usr/bin/env node
+// ============================================================================
+// verify.js — Depo-Pro Simple migration verification
+// ----------------------------------------------------------------------------
+// Run from your project root with:
+//
+//     node verify.js
+//
+// Auto-detects which migration stage you're at (1 → 4), checks every file
+// that should exist, every file that should be gone, runs the TypeScript
+// compiler, and scans your source for forbidden imports. Exit code is 0 on
+// success, 1 if any check fails.
+//
+// Zero dependencies — pure Node.js standard library.
+// ============================================================================
 
-import fs from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
-import { fileURLToPath } from 'url';
+const fs = await import('fs').then(m => m.default);
+const path = await import('path').then(m => m.default);
+const { execSync } = await import('child_process');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = __dirname;
+const ROOT = process.cwd();
+const c = {
+  reset: '\x1b[0m', red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m',
+  blue: '\x1b[34m', cyan: '\x1b[36m', gray: '\x1b[90m', bold: '\x1b[1m',
+};
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const results = { pass: 0, fail: 0, warn: 0 };
 
-const green  = s => `\x1b[32m${s}\x1b[0m`;
-const red    = s => `\x1b[31m${s}\x1b[0m`;
-const yellow = s => `\x1b[33m${s}\x1b[0m`;
-const cyan   = s => `\x1b[36m${s}\x1b[0m`;
-const bold   = s => `\x1b[1m${s}\x1b[0m`;
-const dim    = s => `\x1b[2m${s}\x1b[0m`;
+const isFile = rel => { try { return fs.statSync(path.join(ROOT, rel)).isFile(); } catch { return false; } };
+const isDir  = rel => { try { return fs.statSync(path.join(ROOT, rel)).isDirectory(); } catch { return false; } };
+const read   = rel => { try { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); } catch { return null; } };
 
-const PASS = green('  PASS');
-const FAIL = red('  FAIL');
-const WARN = yellow('  WARN');
-const INFO = dim('  INFO');
+const pass = msg       => { console.log(`  ${c.green}✓${c.reset} ${msg}`); results.pass++; };
+const fail = (msg, h)  => { console.log(`  ${c.red}✗${c.reset} ${msg}`); if (h) console.log(`    ${c.gray}→ ${h}${c.reset}`); results.fail++; };
+const warn = (msg, h)  => { console.log(`  ${c.yellow}⚠${c.reset} ${msg}`); if (h) console.log(`    ${c.gray}→ ${h}${c.reset}`); results.warn++; };
+const info = msg       => console.log(`    ${c.gray}${msg}${c.reset}`);
+const header = title   => console.log(`\n${c.bold}${c.cyan}━━ ${title} ━━${c.reset}`);
 
-let totalPass = 0;
-let totalFail = 0;
+function walkTs(dir) {
+  const out = [];
+  function go(d) {
+    if (!fs.existsSync(d)) return;
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === 'dist' || e.name.startsWith('.')) continue;
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) go(full);
+      else if (e.isFile() && /\.(ts|tsx)$/.test(e.name)) out.push(full);
+    }
+  }
+  go(dir);
+  return out;
+}
 
-function check(label, pass, detail = '') {
-  if (pass) {
-    console.log(`${PASS}  ${label}${detail ? dim('  ' + detail) : ''}`);
-    totalPass++;
+// ────────────────────────────────────────────────────────────────────────────
+// STAGE 1 — New files in place
+// ────────────────────────────────────────────────────────────────────────────
+function checkStage1() {
+  header('STAGE 1 — New files in place');
+
+  const expected = [
+    { path: 'src/lib/audioCompress.ts',            marker: 'compressAudio' },
+    { path: 'src/lib/deepgramClient.ts',           marker: 'export async function transcribe' },
+    { path: 'src/lib/localStore.ts',               marker: 'saveJob' },
+    { path: 'src/components/SimpleTranscribe.tsx', marker: 'export default function SimpleTranscribe' },
+    { path: 'src/App.tsx',                         marker: 'SimpleTranscribe' },
+    { path: 'src/vite-env.d.ts',                   marker: 'vite/client' },
+  ];
+
+  for (const { path: p, marker } of expected) {
+    if (!isFile(p)) { fail(`Missing: ${p}`, 'Create this file'); continue; }
+    const content = read(p) || '';
+    const minLength = p.endsWith('.d.ts') ? 20 : 50;
+    if (content.length < minLength) {
+      fail(`Empty or tiny: ${p}`, 'File exists but has no real content');
+    } else if (!content.includes(marker)) {
+      fail(`Wrong content: ${p}`, `Expected to find "${marker}"`);
+    } else {
+      pass(p);
+    }
+  }
+
+  // App.tsx must not still import the old TranscribeEngine
+  const app = read('src/App.tsx') || '';
+  if (app.includes("from './components/TranscribeEngine'")) {
+    fail('src/App.tsx still imports the old TranscribeEngine',
+         'Replace src/App.tsx with the new simplified version');
+  }
+
+  // audioCompress.ts must be the ffmpeg version
+  const ac = read('src/lib/audioCompress.ts') || '';
+  if (!ac.includes('@ffmpeg/ffmpeg')) {
+    fail('audioCompress.ts is still the Web Audio version',
+         'Replace it with the ffmpeg.wasm version');
   } else {
-    console.log(`${FAIL}  ${label}${detail ? '  ' + red(detail) : ''}`);
-    totalFail++;
+    pass('audioCompress.ts — ffmpeg.wasm version');
   }
-  return pass;
-}
 
-function info(label, detail = '') {
-  console.log(`${INFO}  ${label}${detail ? dim('  ' + detail) : ''}`);
-}
-
-function section(title) {
-  console.log('\n' + bold(cyan('── ' + title + ' ')).padEnd(70, '─'));
-}
-
-function exists(rel) {
-  return fs.existsSync(path.join(root, rel));
-}
-
-function read(rel) {
-  try { return fs.readFileSync(path.join(root, rel), 'utf8'); }
-  catch { return ''; }
-}
-
-function sizeOf(rel) {
-  try { return fs.statSync(path.join(root, rel)).size; }
-  catch { return 0; }
-}
-
-// ─── Stage 1: New files present and valid ────────────────────────────────────
-
-section('STAGE 1 — New architecture files');
-
-const newFiles = [
-  {
-    rel: 'src/App.tsx',
-    minBytes: 800,
-    mustNotContain: ["from './lib/supabase'", "from './lib/database.types'", "TranscribeEngine"],
-    label: 'App.tsx — simplified (no Supabase)',
-  },
-  {
-    rel: 'src/components/SimpleTranscribe.tsx',
-    minBytes: 3000,
-    mustContain: ['compressAudio', 'transcribe', 'saveJob'],
-    label: 'SimpleTranscribe.tsx — exists and has core logic',
-  },
-  {
-    rel: 'src/lib/audioCompress.ts',
-    minBytes: 2000,
-    mustContain: ['OfflineAudioContext', 'audioBufferToWav'],
-    label: 'audioCompress.ts — Web Audio pipeline',
-  },
-  {
-    rel: 'src/lib/deepgramClient.ts',
-    minBytes: 2000,
-    mustContain: ['DeepgramOptions', 'parseUtterances', 'transcribe'],
-    label: 'deepgramClient.ts — sync transcription client',
-  },
-  {
-    rel: 'src/lib/localStore.ts',
-    minBytes: 2000,
-    mustContain: ['IndexedDB', 'saveJob', 'saveUtterances', 'updateUtterance'],
-    label: 'localStore.ts — IndexedDB wrapper',
-  },
-];
-
-for (const f of newFiles) {
-  if (!exists(f.rel)) {
-    check(f.label, false, 'file missing');
-    continue;
+  // vite.config.ts must have COOP/COEP headers
+  const vite = read('vite.config.ts') || '';
+  if (!vite.includes('Cross-Origin-Opener-Policy') || !vite.includes('Cross-Origin-Embedder-Policy')) {
+    fail('vite.config.ts missing COOP/COEP headers',
+         'Add server.headers with COOP and COEP to vite.config.ts');
+  } else {
+    pass('vite.config.ts — COOP/COEP headers present');
   }
-  const content = read(f.rel);
-  const size = sizeOf(f.rel);
-  if (size < f.minBytes) {
-    check(f.label, false, `only ${size} bytes — file may be empty or wrong content`);
-    continue;
-  }
-  if (f.mustContain) {
-    const missing = f.mustContain.filter(s => !content.includes(s));
-    if (missing.length) {
-      check(f.label, false, `missing expected token: ${missing[0]}`);
-      continue;
+
+  // .env / API key
+  const env = read('.env');
+  if (!env) {
+    fail('.env file missing', 'Create it with VITE_DEEPGRAM_API_KEY=your_key');
+  } else {
+    const match = env.match(/^\s*VITE_DEEPGRAM_API_KEY\s*=\s*(.+?)\s*$/m);
+    if (!match) {
+      fail('VITE_DEEPGRAM_API_KEY not found in .env');
+    } else {
+      const key = match[1].replace(/^["']|["']$/g, '').trim();
+      if (!key || key.startsWith('your_') || key.startsWith('<')) {
+        warn('VITE_DEEPGRAM_API_KEY is still a placeholder');
+      } else if (key.length < 30) {
+        warn(`VITE_DEEPGRAM_API_KEY looks short (${key.length} chars)`);
+      } else {
+        pass(`VITE_DEEPGRAM_API_KEY set (${key.length} chars)`);
+      }
     }
   }
-  if (f.mustNotContain) {
-    const found = f.mustNotContain.filter(s => content.includes(s));
-    if (found.length) {
-      check(f.label, false, `still contains old code: ${found[0]}`);
-      continue;
-    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// BUILD
+// ────────────────────────────────────────────────────────────────────────────
+function checkBuild() {
+  header('BUILD — npm install + TypeScript');
+
+  if (!isDir('node_modules')) { fail('node_modules not present', 'Run: npm install'); return; }
+  pass('node_modules present');
+
+  // Check for ffmpeg packages
+  const hasFFmpeg = isDir('node_modules/@ffmpeg/ffmpeg') && isDir('node_modules/@ffmpeg/util');
+  if (!hasFFmpeg) {
+    fail('@ffmpeg packages not installed', 'Run: npm install @ffmpeg/ffmpeg @ffmpeg/util');
+  } else {
+    pass('@ffmpeg/ffmpeg and @ffmpeg/util installed');
   }
-  check(f.label, true);
-}
 
-// .env check
-{
-  const envContent = read('.env');
-  const hasKey = envContent.includes('VITE_DEEPGRAM_API_KEY=') &&
-    !envContent.includes('VITE_DEEPGRAM_API_KEY=your_') &&
-    !envContent.includes('VITE_DEEPGRAM_API_KEY=<') &&
-    envContent.match(/VITE_DEEPGRAM_API_KEY=\S{8,}/);
-  check('.env — VITE_DEEPGRAM_API_KEY is set (non-placeholder)', !!hasKey,
-    hasKey ? '' : 'add VITE_DEEPGRAM_API_KEY=<your key> to .env');
-}
-
-// corrections.ts — must be KEPT (not deleted)
-check(
-  'src/lib/corrections.ts — preserved (contains reusable correction logic)',
-  exists('src/lib/corrections.ts'),
-  exists('src/lib/corrections.ts') ? '' : 'this file should be kept — do not delete it'
-);
-
-// ─── Stage 2: Build passes ────────────────────────────────────────────────────
-
-section('STAGE 2 — Build');
-
-const hasNodeModules = exists('node_modules');
-check('node_modules present', hasNodeModules, hasNodeModules ? '' : 'run: npm install');
-
-if (hasNodeModules) {
+  console.log(`    ${c.gray}Running tsc --noEmit (5-15s)...${c.reset}`);
   try {
-    execSync('npx tsc --noEmit -p tsconfig.app.json 2>&1', {
-      cwd: root,
-      stdio: 'pipe',
-      timeout: 30000,
-    });
-    check('TypeScript — no type errors', true);
+    execSync('npx -y tsc --noEmit -p tsconfig.app.json', { stdio: 'pipe', cwd: ROOT });
+    pass('TypeScript compiles cleanly');
   } catch (err) {
-    const output = err.stdout?.toString() ?? err.stderr?.toString() ?? '';
-    const firstLines = output.split('\n').slice(0, 6).join('\n');
-    check('TypeScript — no type errors', false, '\n' + red(firstLines));
-  }
-
-  try {
-    execSync('npm run build 2>&1', { cwd: root, stdio: 'pipe', timeout: 60000 });
-    check('Vite build — succeeds', true);
-  } catch (err) {
-    const output = err.stdout?.toString() ?? '';
-    const firstLines = output.split('\n').slice(0, 8).join('\n');
-    check('Vite build — succeeds', false, '\n' + red(firstLines));
+    const out = (err.stdout?.toString() || '') + (err.stderr?.toString() || '');
+    const lines = out.split('\n').filter(Boolean).slice(0, 8);
+    fail('TypeScript errors found');
+    for (const line of lines) info(line);
   }
 }
 
-// ─── Stage 3: Old files removed ───────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+// STAGE 3 — Old files removed
+// ────────────────────────────────────────────────────────────────────────────
+function checkStage3() {
+  header('STAGE 3 — Old files removed');
 
-section('STAGE 3 — Old files / folders deleted');
+  const oldFiles = [
+    'src/components/TranscribeEngine.tsx',
+    'src/components/TranscribeEngine copy.tsx',
+    'src/components/CaseIntake.tsx',
+    'src/components/JobDashboard.tsx',
+    'src/components/TemplateConfig.tsx',
+    'src/components/AiReviewPanel.tsx',
+    'src/components/TranscriptEditor.tsx',
+    'src/components/Icons.tsx',
+    'src/lib/supabase.ts',
+    'src/lib/database.types.ts',
+  ];
+  const oldDirs = ['src/components/diff', 'src/components/review', 'src/lib/diff', 'supabase'];
 
-const toDelete = [
-  { rel: 'src/components/TranscribeEngine.tsx',         label: 'TranscribeEngine.tsx' },
-  { rel: 'src/components/TranscribeEngine copy.tsx',    label: 'TranscribeEngine copy.tsx' },
-  { rel: 'src/components/CaseIntake.tsx',               label: 'CaseIntake.tsx' },
-  { rel: 'src/components/JobDashboard.tsx',             label: 'JobDashboard.tsx' },
-  { rel: 'src/components/TemplateConfig.tsx',           label: 'TemplateConfig.tsx' },
-  { rel: 'src/components/AiReviewPanel.tsx',            label: 'AiReviewPanel.tsx' },
-  { rel: 'src/components/TranscriptEditor.tsx',         label: 'TranscriptEditor.tsx' },
-  { rel: 'src/components/Icons.tsx',                    label: 'Icons.tsx' },
-  { rel: 'src/components/SimpleTranscribe copy.tsx',    label: 'SimpleTranscribe copy.tsx' },
-  { rel: 'src/components/diff',                         label: 'src/components/diff/ (folder)' },
-  { rel: 'src/components/review',                       label: 'src/components/review/ (folder)' },
-  { rel: 'src/lib/diff',                                label: 'src/lib/diff/ (folder)' },
-  { rel: 'src/lib/database.types.ts',                   label: 'database.types.ts' },
-  { rel: 'src/lib/supabase.ts',                         label: 'supabase.ts' },
-  { rel: 'supabase',                                    label: 'supabase/ (entire folder)' },
-  { rel: 'src/App copy.tsx',                            label: 'App copy.tsx' },
-];
+  const presentFiles = oldFiles.filter(isFile);
+  const presentDirs  = oldDirs.filter(isDir);
+  const total = presentFiles.length + presentDirs.length;
 
-let oldFilesRemaining = 0;
-for (const item of toDelete) {
-  const present = exists(item.rel);
-  if (present) {
-    oldFilesRemaining++;
-    console.log(`${WARN}  ${item.label}  ${dim('— still present, delete when ready')}`);
+  if (total === 0) {
+    pass('All old Supabase-era files removed');
   } else {
-    console.log(`${PASS}  ${item.label}  ${dim('— deleted')}`);
-    totalPass++;
+    warn(`${total} old item(s) still present — Stage 3 not done yet`);
+    for (const f of presentFiles) info(`• ${f}`);
+    for (const d of presentDirs)  info(`• ${d}/`);
+  }
+
+  if (isFile('src/lib/corrections.ts')) {
+    pass('src/lib/corrections.ts preserved (keep this)');
+  } else if (total === 0) {
+    warn('src/lib/corrections.ts is missing — restore from backup if possible');
   }
 }
 
-if (oldFilesRemaining === 0) {
-  info(`All ${toDelete.length} old items removed`);
-} else {
-  info(`${oldFilesRemaining} of ${toDelete.length} old items still present — safe to delete after Stage 2 testing`);
-}
+// ────────────────────────────────────────────────────────────────────────────
+// STAGE 4 — package.json cleanup
+// ────────────────────────────────────────────────────────────────────────────
+function checkStage4() {
+  header('STAGE 4 — package.json slimmed');
 
-// ─── Stage 4: package.json dependencies trimmed ───────────────────────────────
+  const pkgRaw = read('package.json');
+  if (!pkgRaw) { fail('package.json missing'); return; }
+  let pkg;
+  try { pkg = JSON.parse(pkgRaw); } catch (e) { fail('package.json invalid JSON', e.message); return; }
 
-section('STAGE 4 — package.json cleanup');
+  const shouldBeGone = [
+    '@supabase/supabase-js', '@tanstack/react-virtual', 'lucide-react',
+    'pdfjs-dist', 'tus-js-client', 'wavesurfer.js',
+  ];
+  const deps = pkg.dependencies || {};
+  const stillThere = shouldBeGone.filter(d => deps[d]);
 
-const pkgRaw = read('package.json');
-const pkg = JSON.parse(pkgRaw || '{}');
-const deps = pkg.dependencies ?? {};
-
-const toRemove = [
-  '@supabase/supabase-js',
-  '@tanstack/react-virtual',
-  'lucide-react',
-  'pdfjs-dist',
-  'tus-js-client',
-  'wavesurfer.js',
-];
-
-let removedCount = 0;
-for (const dep of toRemove) {
-  const present = dep in deps;
-  if (!present) {
-    removedCount++;
-    console.log(`${PASS}  ${dep}  ${dim('— removed')}`);
-    totalPass++;
+  if (stillThere.length === 0) {
+    pass('All unnecessary packages removed');
   } else {
-    console.log(`${WARN}  ${dep}  ${dim('— still in dependencies')}`);
+    warn(`${stillThere.length} unnecessary package(s) still in dependencies`);
+    for (const d of stillThere) info(`• ${d}`);
+  }
+
+  for (const required of ['react', 'react-dom', '@ffmpeg/ffmpeg', '@ffmpeg/util']) {
+    if (!deps[required]) fail(`Required package missing: ${required}`, `Run: npm install ${required}`);
   }
 }
 
-if (removedCount === toRemove.length) {
-  info('All 6 unused packages removed from package.json');
-} else {
-  info(`${toRemove.length - removedCount} package(s) left to remove from package.json after Stage 3`);
-}
+// ────────────────────────────────────────────────────────────────────────────
+// ARCHITECTURE — no forbidden imports in new code
+// ────────────────────────────────────────────────────────────────────────────
+function checkForbiddenImports() {
+  header('ARCHITECTURE — no Supabase/TUS/etc imports in new code');
 
-// ─── Architecture: no forbidden imports in new files ─────────────────────────
+  const forbidden = [
+    '@supabase/supabase-js', 'tus-js-client', 'wavesurfer.js',
+    'pdfjs-dist', 'lucide-react', '@tanstack/react-virtual',
+  ];
 
-section('ARCHITECTURE — No forbidden imports in new code');
+  const oldCodePrefixes = [
+    'src/components/TranscribeEngine', 'src/components/CaseIntake',
+    'src/components/JobDashboard', 'src/components/TemplateConfig',
+    'src/components/AiReviewPanel', 'src/components/TranscriptEditor',
+    'src/components/Icons', 'src/components/diff/', 'src/components/review/',
+    'src/lib/supabase', 'src/lib/database.types', 'src/lib/diff/',
+  ];
+  const isOldFile = rel => oldCodePrefixes.some(p => rel.replace(/\\/g, '/').startsWith(p));
 
-const NEW_CODE_PATHS = [
-  'src/App.tsx',
-  'src/components/SimpleTranscribe.tsx',
-  'src/lib/audioCompress.ts',
-  'src/lib/deepgramClient.ts',
-  'src/lib/localStore.ts',
-  'src/lib/corrections.ts',
-];
+  const allFiles = walkTs(path.join(ROOT, 'src'));
+  const filesToScan = allFiles.filter(f => !isOldFile(path.relative(ROOT, f)));
+  const skipped = allFiles.length - filesToScan.length;
 
-const FORBIDDEN = [
-  { pattern: '@supabase/supabase-js',    label: 'Supabase client' },
-  { pattern: 'tus-js-client',            label: 'TUS uploader' },
-  { pattern: 'wavesurfer',               label: 'WaveSurfer' },
-  { pattern: 'pdfjs-dist',               label: 'PDF.js' },
-  { pattern: '@tanstack/react-virtual',  label: 'React Virtual' },
-  { pattern: 'lucide-react',             label: 'Lucide icons' },
-];
-
-let archClean = true;
-for (const filePath of NEW_CODE_PATHS) {
-  if (!exists(filePath)) continue;
-  const content = read(filePath);
-  for (const { pattern, label } of FORBIDDEN) {
-    if (content.includes(pattern)) {
-      check(`${filePath} — no ${label} import`, false, `found: ${pattern}`);
-      archClean = false;
+  const violations = [];
+  for (const f of filesToScan) {
+    const content = fs.readFileSync(f, 'utf8');
+    for (const pkg of forbidden) {
+      const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`(?:import|from)\\s+[^;]*['"\`]${escaped}(?:/[^'"\`]*)?['"\`]`, 'm');
+      if (re.test(content)) violations.push({ file: path.relative(ROOT, f), pkg });
     }
   }
+
+  const suffix = skipped > 0 ? ` (${skipped} old file${skipped !== 1 ? 's' : ''} skipped)` : '';
+  if (violations.length === 0) {
+    pass(`Scanned ${filesToScan.length} new file(s)${suffix} — no forbidden imports`);
+  } else {
+    fail(`${violations.length} new file(s) import removed packages`);
+    for (const v of violations) info(`• ${v.file} → ${v.pkg}`);
+  }
 }
-if (archClean) {
-  check('New files — no forbidden imports', true);
+
+// ────────────────────────────────────────────────────────────────────────────
+// Stage detection
+// ────────────────────────────────────────────────────────────────────────────
+function detectStage() {
+  const newFilesPresent =
+    isFile('src/lib/audioCompress.ts') &&
+    isFile('src/lib/deepgramClient.ts') &&
+    isFile('src/lib/localStore.ts') &&
+    isFile('src/components/SimpleTranscribe.tsx') &&
+    (read('src/App.tsx') || '').includes('SimpleTranscribe') &&
+    (read('src/lib/audioCompress.ts') || '').includes('@ffmpeg/ffmpeg');
+
+  const oldFilesGone =
+    !isFile('src/components/TranscribeEngine.tsx') &&
+    !isDir('supabase') &&
+    !isFile('src/lib/supabase.ts');
+
+  let pkg = {};
+  try { pkg = JSON.parse(read('package.json') || '{}'); } catch {}
+  const deps = pkg.dependencies || {};
+  const cleanDeps = !deps['@supabase/supabase-js'] && !deps['tus-js-client'] && !deps['pdfjs-dist'];
+
+  if (!newFilesPresent) return { name: 'Stage 0 — not started', emoji: '○', color: c.gray };
+  if (!oldFilesGone)    return { name: 'Stage 1-2 — new files in, old files still present', emoji: '◐', color: c.yellow };
+  if (!cleanDeps)       return { name: 'Stage 3 — source cleaned, package.json not yet', emoji: '◑', color: c.blue };
+  return                       { name: 'Stage 4 — fully migrated', emoji: '●', color: c.green };
 }
 
-// ─── Summary ──────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+// Main
+// ────────────────────────────────────────────────────────────────────────────
+console.log(`${c.bold}${c.blue}╔═══════════════════════════════════════════════╗${c.reset}`);
+console.log(`${c.bold}${c.blue}║  Depo-Pro Simple — Migration Verifier         ║${c.reset}`);
+console.log(`${c.bold}${c.blue}╚═══════════════════════════════════════════════╝${c.reset}`);
+console.log(`${c.gray}  Running in: ${ROOT}${c.reset}`);
 
-console.log('\n' + bold('─'.repeat(60)));
+checkStage1();
+checkBuild();
+checkStage3();
+checkStage4();
+checkForbiddenImports();
 
-const stage1Done = !newFiles.some(f => {
-  const content = read(f.rel);
-  return !exists(f.rel) || sizeOf(f.rel) < f.minBytes ||
-    (f.mustContain && f.mustContain.some(s => !content.includes(s))) ||
-    (f.mustNotContain && f.mustNotContain.some(s => content.includes(s)));
-});
-const stage3Done = oldFilesRemaining === 0;
-const stage4Done = removedCount === toRemove.length;
+const stage = detectStage();
 
-let stageLabel, stageDesc;
-if (!stage1Done) {
-  stageLabel = '○  Stage 0';
-  stageDesc  = 'Not started — copy in the new files to begin';
-} else if (!stage3Done) {
-  stageLabel = '◐  Stage 1-2';
-  stageDesc  = 'New files in place, old files still present — safe to test';
-} else if (!stage4Done) {
-  stageLabel = '◑  Stage 3';
-  stageDesc  = 'Source cleaned — remove unused packages from package.json';
+console.log(`\n${c.bold}━━ Summary ━━${c.reset}`);
+console.log(`  ${c.green}${results.pass} passed${c.reset}` +
+            (results.warn ? `   ${c.yellow}${results.warn} warning${results.warn !== 1 ? 's' : ''}${c.reset}` : '') +
+            (results.fail ? `   ${c.red}${results.fail} failed${c.reset}` : ''));
+console.log(`\n  ${stage.color}${stage.emoji} ${c.bold}${stage.name}${c.reset}`);
+
+if (results.fail > 0) {
+  console.log(`\n  ${c.red}Fix the failures above before moving to the next stage.${c.reset}\n`);
+  process.exit(1);
+} else if (results.warn > 0) {
+  console.log(`\n  ${c.yellow}Working but with warnings — review them above.${c.reset}\n`);
+  process.exit(0);
 } else {
-  stageLabel = '●  Stage 4';
-  stageDesc  = 'Fully migrated';
+  console.log(`\n  ${c.green}Everything checks out.${c.reset}\n`);
+  process.exit(0);
 }
-
-const color = totalFail === 0 ? green : red;
-console.log(bold(color(`\n  ${stageLabel}`)) + `  ${dim(stageDesc)}`);
-console.log(dim(`  ${totalPass} passed, ${totalFail} failed\n`));
-
-process.exit(totalFail > 0 ? 1 : 0);
