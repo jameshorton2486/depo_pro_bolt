@@ -213,6 +213,7 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
     appearances: false,
     billing: false,
     reporterInfo: false,
+    videoInterp: false,
     keyterms: false,
     recentIntakes: false,
   });
@@ -282,6 +283,7 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
       appearances: false,
       billing: false,
       reporterInfo: false,
+      videoInterp: false,
       keyterms: false,
       recentIntakes: false,
     });
@@ -666,18 +668,6 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={intake.reporterJobDetails?.interpreter ?? false}
-                      onChange={e => setIntake(prev => ({
-                        ...prev,
-                        reporterJobDetails: { ...prev.reporterJobDetails, interpreter: e.target.checked },
-                      }))}
-                      className="accent-sky-500"
-                    />
-                    <span className="text-xs text-slate-300">Interpreter</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
                       checked={intake.reporterJobDetails?.csr ?? false}
                       onChange={e => setIntake(prev => ({
                         ...prev,
@@ -689,6 +679,100 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
                   </label>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Videographer & Interpreter ────────────────────────────────── */}
+        <div className="space-y-2">
+          <SectionHeader
+            title="Videographer & Interpreter"
+            subtitle="Video operator and interpreter contact info"
+            open={openSections.videoInterp}
+            onToggle={() => toggleSection('videoInterp')}
+            badge={
+              intake.videographer?.name && intake.interpreter?.name
+                ? 'Both'
+                : intake.videographer?.name
+                ? 'Video'
+                : intake.interpreter?.name
+                ? 'Interp.'
+                : undefined
+            }
+          />
+          {openSections.videoInterp && (
+            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-4 space-y-4">
+
+              {/* Videographer */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Videographer</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field
+                    label="Name"
+                    value={intake.videographer?.name ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, videographer: { ...prev.videographer, name: v } }))}
+                    placeholder="John Doe"
+                  />
+                  <Field
+                    label="Company"
+                    value={intake.videographer?.company ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, videographer: { ...prev.videographer, company: v } }))}
+                    placeholder="Video Pros LLC"
+                  />
+                  <Field
+                    label="Phone"
+                    value={intake.videographer?.phone ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, videographer: { ...prev.videographer, phone: v } }))}
+                    placeholder="(210) 555-0100"
+                  />
+                  <Field
+                    label="Email"
+                    value={intake.videographer?.email ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, videographer: { ...prev.videographer, email: v } }))}
+                    placeholder="video@example.com"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800/60" />
+
+              {/* Interpreter */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Interpreter</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field
+                    label="Name"
+                    value={intake.interpreter?.name ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, interpreter: { ...prev.interpreter, name: v } }))}
+                    placeholder="Maria Gomez"
+                  />
+                  <Field
+                    label="Language"
+                    value={intake.interpreter?.language ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, interpreter: { ...prev.interpreter, language: v } }))}
+                    placeholder="Spanish"
+                  />
+                  <Field
+                    label="Company"
+                    value={intake.interpreter?.company ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, interpreter: { ...prev.interpreter, company: v } }))}
+                    placeholder="Lingua Services"
+                  />
+                  <Field
+                    label="Phone"
+                    value={intake.interpreter?.phone ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, interpreter: { ...prev.interpreter, phone: v } }))}
+                    placeholder="(210) 555-0200"
+                  />
+                  <Field
+                    label="Email"
+                    value={intake.interpreter?.email ?? ''}
+                    onChange={v => setIntake(prev => ({ ...prev, interpreter: { ...prev.interpreter, email: v } }))}
+                    placeholder="interp@example.com"
+                  />
+                </div>
+              </div>
+
             </div>
           )}
         </div>

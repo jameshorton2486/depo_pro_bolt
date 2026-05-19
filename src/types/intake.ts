@@ -7,12 +7,27 @@ export interface CaseInfo {
   caseStyle: string;
   plaintiff: string;
   defendant: string;
-  courtType: 'federal' | 'state' | 'county' | '';
+  courtType: string;
   court: string;
   district: string;
   division: string;
   county: string;
   state: string;
+}
+
+export interface VideographerInfo {
+  name: string;
+  company: string;
+  phone: string;
+  email: string;
+}
+
+export interface InterpreterInfo {
+  name: string;
+  language: string;
+  company: string;
+  phone: string;
+  email: string;
 }
 
 export interface DeponentInfo {
@@ -129,6 +144,8 @@ export interface IntakeRecord {
   appearances: AttorneyAppearance[];
   reporterJobDetails: Partial<ReporterJobDetails>;
   billing: Partial<BillingInfo>;
+  videographer?: Partial<VideographerInfo>;
+  interpreter?: Partial<InterpreterInfo>;
   deepgramKeyterms: string[];
   confirmedSpellings: string[];
   phoneticMappings: PhoneticMapping[];
