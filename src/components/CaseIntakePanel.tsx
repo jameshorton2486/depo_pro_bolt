@@ -10,13 +10,22 @@ import { parseReporterNotes } from '../lib/reporterNotesParser';
 import { saveIntake, listIntakes, deleteIntake, createEmptyIntake } from '../lib/intakeStore';
 
 // ────────────────────────────────────────────────────────────────────────────
-// PDF text extraction via pdfjs-dist
+// Text extraction — routes by file extension
+// Supports: .pdf, .docx, .doc, .txt, .text
 // ────────────────────────────────────────────────────────────────────────────
 
+async function extractText(file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+  if (ext === 'pdf') return extractPDFText(file);
+  if (ext === 'docx' || ext === 'doc') return extractDocxText(file);
+  if (ext === 'txt' || ext === 'text') return extractTxtText(file);
+
+  throw new Error(`Unsupported file type ".${ext}". Upload a PDF, DOCX, or TXT file.`);
+}
+
 async function extractPDFText(file: File): Promise<string> {
-  // Dynamic import keeps this out of the initial bundle
   const pdfjsLib = await import('pdfjs-dist');
-  // Worker setup
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
   const arrayBuffer = await file.arrayBuffer();
@@ -40,6 +49,22 @@ async function extractPDFText(file: File): Promise<string> {
   }
 
   return pages.join('\n\n--- PAGE BREAK ---\n\n');
+}
+
+async function extractDocxText(file: File): Promise<string> {
+  const mammoth = await import('mammoth');
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  return result.value;
+}
+
+function extractTxtText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read text file.'));
+    reader.readAsText(file);
+  });
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -150,7 +175,7 @@ function DropZone({
     >
       <input ref={ref} type="file" accept={accept} className="hidden" onChange={e => { if (e.target.files?.[0]) onFile(e.target.files[0]); }} />
       {loading ? (
-        <p className="text-xs text-sky-400 animate-pulse">Parsing PDF...</p>
+        <p className="text-xs text-sky-400 animate-pulse">Parsing document...</p>
       ) : fileName ? (
         <>
           <p className="text-xs font-semibold text-sky-400 truncate">{fileName}</p>
@@ -159,7 +184,7 @@ function DropZone({
       ) : (
         <>
           <p className="text-xs text-slate-400">{label}</p>
-          <p className="text-[10px] text-slate-600 mt-0.5">PDF only</p>
+          <p className="text-[10px] text-slate-600 mt-0.5">PDF, DOCX, or TXT</p>
         </>
       )}
     </div>
@@ -269,7 +294,7 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
     setNodLoading(true);
     setParseError(null);
     try {
-      const text = await extractPDFText(file);
+      const text = await extractText(file);
       const parsed = parseNODText(text);
       setIntake(prev => ({
         ...prev,
@@ -294,7 +319,7 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
     setNotesLoading(true);
     setParseError(null);
     try {
-      const text = await extractPDFText(file);
+      const text = await extractText(file);
       const parsed = parseReporterNotes(text);
       setIntake(prev => ({
         ...prev,
@@ -409,8 +434,8 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
               Extract from NOD
             </p>
             <DropZone
-              label="Drop NOD PDF here"
-              accept=".pdf"
+              label="Drop NOD here"
+              accept=".pdf,.docx,.doc,.txt,.text"
               onFile={handleNOD}
               fileName={intake.nodSource}
               loading={nodLoading}
@@ -421,8 +446,8 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
               Reporter Notes
             </p>
             <DropZone
-              label="Drop reporter notes PDF"
-              accept=".pdf"
+              label="Drop reporter notes here"
+              accept=".pdf,.docx,.doc,.txt,.text"
               onFile={handleReporterNotes}
               fileName={intake.notesSource}
               loading={notesLoading}
