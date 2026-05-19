@@ -133,6 +133,9 @@ export async function transcribe(
   const fullOpts: DeepgramOptions = { ...DEFAULT_OPTIONS, ...options };
   const url = `${DEEPGRAM_API_BASE}/listen?${buildQueryString(fullOpts)}`;
 
+  console.log('[Deepgram] sending blob — size MB:', (audioBlob.size / 1024 / 1024).toFixed(2), '| type:', audioBlob.type || '(none)');
+  console.log('[Deepgram] url:', url);
+
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -142,12 +145,17 @@ export async function transcribe(
     body: audioBlob,
   });
 
+  console.log('[Deepgram] response status:', res.status);
+
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
+    console.error('[Deepgram] error body:', errText.slice(0, 400));
     throw new Error(`Deepgram error ${res.status}: ${errText.slice(0, 400)}`);
   }
 
-  return (await res.json()) as DeepgramResponse;
+  const data = (await res.json()) as DeepgramResponse;
+  console.log('[Deepgram] response json:', data);
+  return data;
 }
 
 // ----------------------------------------------------------------------------
