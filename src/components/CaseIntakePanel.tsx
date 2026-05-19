@@ -205,6 +205,7 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
   const [savedIntakes, setSavedIntakes] = useState<IntakeRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [clearMsg, setClearMsg] = useState(false);
 
   // Section open states — all collapsed until a document is parsed
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -289,6 +290,8 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
     });
     setParseError(null);
     setKeytermInput('');
+    setClearMsg(true);
+    setTimeout(() => setClearMsg(false), 2500);
   };
 
   // ── NOD upload ────────────────────────────────────────────────────────────
@@ -413,10 +416,13 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
           )}
           <button
             onClick={handleNewDeposition}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
+            className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition"
           >
             New Deposition
           </button>
+          {clearMsg && (
+            <span className="text-xs font-semibold text-emerald-400">Cleared</span>
+          )}
           <button
             onClick={handleSave}
             disabled={saving}
