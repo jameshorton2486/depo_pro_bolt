@@ -18,7 +18,7 @@
 import type { ParsedUtterance } from './deepgramClient';
 
 const DB_NAME = 'depopro_local';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const STORE_JOBS = 'jobs';
 const STORE_UTTERANCES = 'utterances';
 
