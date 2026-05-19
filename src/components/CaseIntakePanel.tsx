@@ -181,10 +181,10 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
-  // Section open states
+  // Section open states — all collapsed until a document is parsed
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    titlePage: true,
-    depositionDetails: true,
+    titlePage: false,
+    depositionDetails: false,
     appearances: false,
     billing: false,
     reporterInfo: false,
@@ -237,6 +237,31 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
         deponent: { ...prev.depositionDetails.deponent, [field]: value },
       },
     }));
+  };
+
+  // ── New Deposition ────────────────────────────────────────────────────────
+  const handleNewDeposition = () => {
+    const hasData =
+      intake.nodSource ||
+      intake.notesSource ||
+      intake.caseInfo.causeNumber ||
+      intake.depositionDetails.deponent.name ||
+      intake.appearances.length > 0;
+
+    if (hasData && !confirm('Start a new deposition? Unsaved changes will be lost.')) return;
+
+    setIntake(createEmptyIntake());
+    setOpenSections({
+      titlePage: false,
+      depositionDetails: false,
+      appearances: false,
+      billing: false,
+      reporterInfo: false,
+      keyterms: false,
+      recentIntakes: false,
+    });
+    setParseError(null);
+    setKeytermInput('');
   };
 
   // ── NOD upload ────────────────────────────────────────────────────────────
@@ -360,6 +385,12 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
             </span>
           )}
           <button
+            onClick={handleNewDeposition}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
+          >
+            New Deposition
+          </button>
+          <button
             onClick={handleSave}
             disabled={saving}
             className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition"
@@ -402,6 +433,14 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
         {parseError && (
           <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 text-xs text-rose-300">
             Parse error: {parseError}
+          </div>
+        )}
+
+        {/* ── Empty state prompt ────────────────────────────────────────── */}
+        {!intake.nodSource && !intake.notesSource && (
+          <div className="border border-dashed border-slate-800 rounded-xl p-6 text-center">
+            <p className="text-sm font-semibold text-slate-400">Upload a NOD or reporter notes above to auto-populate fields</p>
+            <p className="text-xs text-slate-600 mt-1.5">Or expand any section below to fill in manually</p>
           </div>
         )}
 
