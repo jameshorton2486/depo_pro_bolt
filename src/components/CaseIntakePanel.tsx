@@ -490,9 +490,16 @@ export default function CaseIntakePanel({ onKeytermsSaved, onIntakeLinked }: Pro
                     className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
                   >
                     <option value="">Select...</option>
-                    <option value="federal">Federal</option>
-                    <option value="state">State District</option>
-                    <option value="county">County</option>
+                    <option value="Federal District Court">Federal District Court</option>
+                    <option value="State District Court">State District Court</option>
+                    <option value="County Court">County Court</option>
+                    <option value="County Court at Law">County Court at Law</option>
+                    <option value="Probate Court">Probate Court</option>
+                    <option value="Family Court">Family Court</option>
+                    <option value="Justice Court">Justice Court</option>
+                    <option value="Arbitration">Arbitration</option>
+                    <option value="Administrative">Administrative</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
               </div>
