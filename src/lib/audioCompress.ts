@@ -32,7 +32,7 @@ import { fetchFile, toBlobURL } from '@ffmpeg/util';
 // This sidesteps any remaining COEP/CORP edge cases by making the script
 // appear to come from the same origin, which the worker loader always accepts.
 const FFMPEG_CORE_VERSION = '0.12.6';
-const FFMPEG_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
+const FFMPEG_BASE_URL = `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
 
 // Singleton — built lazily on first use, reused thereafter
 let ffmpegInstance: FFmpeg | null = null;
@@ -79,9 +79,10 @@ async function getFFmpeg(
     // toBlobURL fetches from CDN and returns a same-origin blob:// URL.
     // The ffmpeg worker loader always accepts same-origin scripts, so this
     // works regardless of COEP policy variant (require-corp or credentialless).
-    const [coreURL, wasmURL] = await Promise.all([
+    const [coreURL, wasmURL, workerURL] = await Promise.all([
       toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.js`, 'text/javascript'),
       toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm'),
+      toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.worker.js`, 'text/javascript'),
     ]);
 
     onProgress?.({
@@ -90,7 +91,7 @@ async function getFFmpeg(
       message: 'Initializing audio processor...',
     });
 
-    await ffmpeg.load({ coreURL, wasmURL });
+    await ffmpeg.load({ coreURL, wasmURL, workerURL });
 
     onProgress?.({
       phase: 'loading_ffmpeg',
