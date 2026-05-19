@@ -122,6 +122,8 @@ export function createEmptyIntake(overrides: Partial<IntakeRecord> = {}): Intake
     deepgramKeyterms: [],
     confirmedSpellings: [],
     phoneticMappings: [],
+    nodSource: undefined,
+    notesSource: undefined,
     ...overrides,
   };
 }
